@@ -90,4 +90,32 @@ The `rip` is overwritten with an address which is just `4` bytes in front, and a
 
 ## Polaris
 ### Main Idea
-i hate this problem
+With one look at the problem spec I new that this time I could not simply perform any sort of write-past exploit, due the existence of the canary—which would immediately throw and error if it detected a change of itself. Since I felt this was going to be difficult (I ended up spending over 14 total hours on this problem unfortunately) I took a long look at `dehexify.c`. I had remembered from earlier lectures that the `gets` function was highly prone to write-past attacks, and I spotted the function within the `dehexify` function and I began thinking about my approach. I spent an hour trying to come up with any method to "hop" over the canary with no avail, so I decided to just try and overwite the canary for the heck of it.
+### Testing
+I performed the following tests within my interact:
+```
+p.send('A' * 15 + '\n)
+```
+This ended up overwriting the canary and—as expected—immediately threw a segmentation fault.
+```
+p.send('A' * 15 + '\\x')
+```
+I experimented some more.
+```
+p.send('A' * 16 + '0')
+```
+After trying these three lines I definitely new there was no way to attempt to overwrite the canary and still have a successful exploit. I knew I had to some how "jump" the canary bits. I recall from lecture that the method to "jump" the bits was to actually simply look at the canary (possibly with GDB) and then, during an overflow write attack, simply write the canary itself when you reach it and then continue with garbage `AAAAA`'s afterward. Going into GDB, I located the canary since they are always located between the local variables and the `sfp` and `rip` of the stack frame's function. I then ran into another problem: I didn't realize at first but it totally made sense: the canary would be randomized upon every run of the program. What good would the canary be if it was never randomized? A simple hex editor could easily crack the canary and a ton of exploits would be on their way. I had to find another section of code that could be exploited in order to print out the canary *during* that execution so that I could immediately pass the printed canary back into the program to exploit it.
+### Second Idea
+After browsing Ed forums and being stuck for a couple more hours, I found a post that hinted on the use of the `i` and `j` variables as part of the attack. I realized that a particular oversight from the programmer allowed me to abuse the hexadecimal cnoverter. The `while` loop in `dehexify` would take 4 characters of hexadecimal (`\x41` for example), and then convert it into one single ASCII letter (`A`). In the code I saw `i += 3` within the `if` statement of the converter, which made me realize that I could possibly cause `dehexify` to read past it's designated buffer size *without* overwriting the canary at all. Finally, I read through the spec again and noticed that in this case since the program expected the user to enter an actual hexadecimal as literal characters, all backslashes (`\`) had to be escaped with the escape character (which is also the backslash) in order for the program to recognize the backslash itself as part of the hexadecimal format. I got to work experimenting.
+### Testing 2
+I tried many different inputs to try and cause `i` to be way ahead of `j` in order to "skip" the read towards canary without actually writing anything over it. At this moment I still had not really understood how the skipping worked, but just that skipping was possible and existed as a possible exploit, hence the strange test inputs. Here are some of the `p.send`'s I tried:
+```
+p.send('\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\\x\n')
+p.send('\\x\\x\\x\\x\\x\\x\\x\n')
+```
+At this point I still did not fully grasp the format for hexadecimal, so I thought there was only one denoted character after the escaped double backslashes.
+```
+p.send('\\xAA\\xAA\\xAA\\xAA\\xAA\\xAA\\xAA\n'
+p.send('\\xAA\\xAA\\xAA\\xAA\\\n\n')
+```
+After figuring out my error, I fixed my input and went backt to the trusty `AA` garbage byte. Here, I began to slowly get closer to solving part 1 of this exploit.
