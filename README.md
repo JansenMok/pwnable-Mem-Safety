@@ -119,3 +119,30 @@ p.send('\\xAA\\xAA\\xAA\\xAA\\xAA\\xAA\\xAA\n'
 p.send('\\xAA\\xAA\\xAA\\xAA\\\n\n')
 ```
 After figuring out my error, I fixed my input and went backt to the trusty `AA` garbage byte. Here, I began to slowly get closer to solving part 1 of this exploit.
+### Exploit Process
+After this point and getting many many segmentation faults, I slowed down on brute forcing and thought for a moment how hopping `i` would actually work. I sat down and drew out a diagram of the bytes being tracked by `j` and then hopping 4 bytes with `i` to follow how both variables moved forward through a string as it was passed into the program. I realized that while `\\xAA` was `4` bytes (the `\\` counts as one character because the first backslash is escaping the second backslash, making it a literal backslash character), `i` was interpretting it as a single byte character. Although this might have been obvious, I did not fully understand how to precisely reach the canary. I realized, though, that since the buffer was `16` bytes long, `j` would actually be `3` after hopping all `16` bytes. This means that I would be able to make the program output more than it would input, by `i - j` amount. Since the canary was only `4` bytes, this was definitely possible. I got to work "hopping" `j` 4 times:
+```
+p.send('\\xAA\\xAA\\xAA\\xAA')
+```
+This still seg-faulted, and after being confused for a while I realized that `p.send` would simply always be unhappy if there was no newline `\n` character at the end of all inputs, so I tried:
+```
+p.send('\\xAA\\xAA\\xAA\\xAA\n')
+```
+But then quickly realized that this would seg-fault since although `j` was still relatively small due to hopping, `i` had blown past 15. I quickly realized I could fit a newline character right within the garbage, since each hexadecimal escape contained *two* hexadecimals:
+```
+p.send('\\xAA\\xAA\\xAA\\xA\n')
+```
+I finally found sucess after fitting the newline character within the hexadecimal escape character. This `p.send` finally did not seg-fault, so I was happy with that.\
+\
+Next, I began working on the receive code. With this `p.send` code, `i` is at `15` while `j` is at `3`. Since I know the canary is directly after the writable bytes, and the canary was `4` bytes, I wanted to receive all the way to the end of canary. Since `j` dictates the length of the end result post-conversion, my garbage's length would be `4` bytes long. The canary would be the immediate next `4` bytes after that. Soforth, I tried receiving `8` total bytes, `4` bytes of garbage `+` `4` bytes of canary:
+```
+print(p.recv(8))
+```
+This worked, although the Python `print` output was unintelligble since it was trying to convert raw bits into ASCII, I assume. The next thing was to extract the canary out of these received `8` bytes.
+```
+receive = p.recv(8)
+canary = receive[4:8]
+```
+Now that I successfully extracted the canary, all that was left is to perform the second `p.send`, which would now write into `answer`(?) and then subsequently into the canary, which I would now know.
+### Testing 3
+hi
