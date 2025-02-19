@@ -339,3 +339,20 @@ An oversight by simply printing was that I couldn't read the jumble that was pri
 0xffffdf98:     0x3d474745      0xcd58326a      0x89c38980      0x58476ac1
 ```
 Checking the `SHELLCODE` in my `egg` file, the first `4` bytes were `\x6a\x32\x58\xcd` which lines up NOT with the address `0xffffdf98` but rather the address `4` bytes after: `0xffffdf9c`. Unfortunately, I made the aforementioned careless mistake and thought `0xffffdf98 + 4` was `0xffffdfac` rather than `0xffffdf9c`. I subsequently fixed this later on and finally solved the problem.
+
+
+## Deneb
+
+### Main Idea
+Since this problem is similar to Spica, I decided to refresh myself with how I approached Spica. After a refresher, I tried to look for a similar method to solving this problem. I figured that, once again, I could overflow the the `uint32_t`. The difference from Spica is that in the the Spica problem, the unsigned integer I overflowed as a `uint8_t` which was substatially smaller in size. Another important difference, though, was the input method, in which in this problem decimals were inputted instead of hexadecimal.
+
+### Testing
+I figured if I just inputed `-1` it would achieve the same thing, instead of having to to type in the hexadecimal like in Spica. Besides this part of the exploit, I did not find any more similarities to Spica, so I decided to continue looking at the `orbit.c` to look for more vulnerabilities. After being stuck for a while, I checked Ed and came across a hint that involved a TOCTTOU attack. This made me realize the hint given in the spec which suggested having two terminals open. I decide to skip more testing the attack with two terminals and go straight into programming since I understood how to execute the attack with my lecture notes.
+
+### Exploit Process
+I left much of the default code in the `interact` file the same and added just a couple of my own lines. I removed the default `p.send` line and added my TOCTTOU attack right before my own `-1` `p.send` line. This will allow me to change the `hack` file *after* the `file_too_big` function error checks the file size. I copied the file opening code at the beginning of the file and then began writing my code for the `f.write` function. I knew that I needed to input garbage into `buf` to get to the RIP just like the previous problems, so I whipped out the GDB and began testing.
+
+### Magic Numbers
+The `buf` variable is a character array size `MAX_BUFFSIZE` which is defined at the top of the `orbic.c` file as `128` bytes. I wrote garbage for `127` bytes and then added a newline character in order to keep `f.write` happy. I also found the location of the RIP to be at `0xffffd73c` and subtracted this address from the end of `buf` which is `0xffffd728`. `0xffffd73c - 0xffffd728 = 20`. Therefore, `20` bytes of garbage needs to be added after filling up `buf` in order to get to the RIP.
+
+### GDB
