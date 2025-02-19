@@ -143,6 +143,17 @@ This worked, although the Python `print` output was unintelligble since it was t
 receive = p.recv(8)
 canary = receive[4:8]
 ```
-Now that I successfully extracted the canary, all that was left is to perform the second `p.send`, which would now write into `answer`(?) and then subsequently into the canary, which I would now know.
+Now that I successfully extracted the canary, all that was left is to perform the second `p.send`, which would now write into `buffer` and then subsequently into the canary, which I have now obtained.
 ### Testing 3
-hi
+I began writing the `p.send` and debugging with GDB to ensure that I was accessing the correct bytes of data. Here was the first iteration:
+```
+p.send('A' * 16 + canary)
+```
+In this iteration I just wanted to ensure that the canary was properly written into where it was supposed to be. I used GDB to check the canary during the curent runthrough and then compared it to what my exploit writes after stepping over the while loop. Indeed, it was successful, so theoretically this `p.send` should run fine. But it did not. I spent a couple minutes figuring out why, and I realized that I still had to follow the requirements for every `p.send`: strings had to end with the newline character. After adding my newline character, I continued writing more of my exploit.
+```
+p.send('A' * 15 + '\n' + canary + 'A' * 12 + '\xAA\xAA\xAA\xAA')
+```
+After trying this lien of code everything suddenly broke, so I got really confused. I spent a long time attempting to figure out why this `p.send` was not working. I finally solved the problem after visiting OH. Turns out, this `p.send` sees the newline character after adding `15` `A`'s and immediately terminates, ignoring the rest of my exploit, which isn't what we want. But I still need to be able to place a newline character right at the end of `buffer` or else the program would complain. I got help in OH and learned that we could trick the code by placing the null terminator within my `p.send`. This would not prematurely end `p.send` but would ensure the program would not complain overall since it would still "count" as the end of the string. After replacing the newline character with a null terminator, my `p.send` was now correctly filling up `buffer` with garbage, "hopping" over the canary, adding more garbage until it reaches the RIP, and then filling RIP with my garbage. Now that I could see that within GDB, I continued writing my exploit.
+```
+p.send('A' * 15 + '\x00' + canary + 'A' * 12 + '\x20\xd7\xff\xff' + SHELLCODE)
+```
