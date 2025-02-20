@@ -445,6 +445,7 @@ First, I wrote the address of RIP which I found from GDB into the first two blan
 ```
 ...
 0xffffd6fc [66][94][04][08] RIP of main
+...
 0xffffd6e8 [80][d7][ff][ff] SFP of main
 0x00000000 [  ][  ][  ][  ] buf
 ... all 128 bytes of buf
