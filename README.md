@@ -429,3 +429,53 @@ Breakpoint 3, read_file () at orbit.c:53
 0xffffd738:     0x61616161      0xffffd740      0xdb31c031      0xd231c931
 ```
 Jumping to the final breakpoint, during the stall, the file is overwritten with my exploit, which overflows `buf` and into the SFP and RIP, writing garbage into the SFP (`0x61616161`), and the address to `SHELLCODE` in the RIP. Then the `read_file` function "returns" and `SHELLCODE` is run. Exploit complete.
+
+
+## Antares
+
+### Preface
+Following the spec was pretty straight forward although not without hiccups. At first reading the problem, with so many steps in the spec given and the skeleton code, I was overwhelmed with the information and became confused. Although I had fully understood the spec, and I completely understood how the exploit worked from my lecture notes, I still did not comprehend what I was supposed to fill out in the first blanks in the `egg` file. After rewatching the section in lecture that talked about this `printf` percent formatter exploit and also spending an hour and a half staring at the `egg` file, I slowly began to understand what I was supposed to do.
+
+Referencing my notes from lecture, I tried to match the example given in lecture with the code in this problem. I figured out if I fully understood the exploit within lecture I could simply translate this problem into a slightly more complex version of the example in lecture. I got to work:
+
+The example C code in lecture involved a function `vulnerable` where `buf` was initalized. Following the initialization was `str`'s initialization, and then the `fgets` function to read in user input. In the last line sits the `printf` function where the exploit would be performed. One of the slides shows example input into the program as well as the result. In the slide, the goal was to write `100` into the address `0xdeadbeef`. Following this, I translated the slide's example with the goal of the spec in this problem, treating `0xdeadbeef` as the address of RIP and treating `100` as the address of `SHELLCODE`.
+
+### Main Idea
+First, I wrote the address of RIP which I found from GDB into the first two blanks of the payload. I wasn't so sure why there were 8 `A`s at the beginning of the payload (as the placement of these garbage values did not appear in the lecture example), but I ignored it for now. Afterwards came the `printf` "pointer" hopping. In order to figure out how much to hop the `printf` function's argument "pointer", I drew out the text-based stack frame to help me visualize the program:
+```
+...
+0xffffd6fc [66][94][04][08] RIP of main
+0xffffd6e8 [80][d7][ff][ff] SFP of main
+0x00000000 [  ][  ][  ][  ] buf
+... all 128 bytes of buf
+0x00000000 [  ][  ][  ][  ] buf <-- arg5 we want to go here
+0x00000000 [  ][  ][  ][  ] buf arg to calibrate <-- arg4
+0x00000000 [  ][  ][  ][  ] RIP of calibrate <-- arg3
+0x00000000 [  ][  ][  ][  ] SFP of calibrate <-- arg2
+0x00000000 [  ][  ][  ][  ] &f <-- arg1
+0x00000000 [  ][  ][  ][  ] buf arg to printf <-- things start here
+0x00000000 [  ][  ][  ][  ] RIP of printf
+0x00000000 [  ][  ][  ][  ] SFP of printf
+[printf frame]
+```
+Without needing to fill out the addresses into the diagram, I understood how far to move up `printf`'s "pointer". Since I wanted `printf` to gain access to the beginning of `buf`, I had to shift the argument "pointer" up `4` times. That became the answer to the second blank, where `%c` would be inputted `4` times.
+
+Finally, in the last section of the `egg`, I had to write in the address to the `SHELLCODE` since the `printf` function will write into the address pointed to by the argument "pointer". I found the `SHELLCODE` location by placing a breakpoint in `main` and then printing out argv elements until I recognized the bytes of `SHELLCODE` and then checking with the literal hexadecimal in the `arg` file:
+```
+(gdb) b 17
+Breakpoint 1 at 0x8049280: file calibrate.c, line 18.
+(gdb) r
+Starting program: /home/antares/calibrate $'j2X̀\211É\301jGX̀1\300Ph-iii\211\342Ph+mmm\211\341Ph//shh/bin\211\343PRQS\211\3411Ұ\v̀' < /tmp/tmp.kljJkF
+
+Breakpoint 1, main (argc=2, argv=0xffffd774) at calibrate.c:18
+18	    calibrate(buf);
+(gdb) p argv
+$1 = (char **) 0xffffd774
+(gdb) p argv[0]
+$2 = 0xffffd870 "/home/antares/calibrate"
+(gdb) p argv[1]
+$3 = 0xffffd888 "j2X̀\211É\301jGX̀1\300Ph-iii\211\342Ph+mmm\211\341Ph//shh/bin\211\343PRQS\211\341\061Ұ\v̀"
+(gdb) x/4x argv[1]
+0xffffd888:	0xcd58326a	0x89c38980	0x58476ac1	0xc03180cd
+```
+After figuring out the address of the `SHELLCODE`, I inputted it into the `egg` file, following the `FIRST_HALF` and `SECOND_HALF` variables' comment hints. Finally, I calculated the number of remaining bytes—which I'm probably wrong, awaiting private Ed post reply...
